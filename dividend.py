@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from abc import ABC, abstractmethod
 
 from io import StringIO
 
@@ -11,71 +12,190 @@ st.set_page_config(
 )
 
 
-def load_statement(string_data):
-    res = []
-    for line in string_data:
-        if line.count(",") == 6:
+class Bank(ABC):
+    @abstractmethod
+    def sanitise(self, stri):
+        pass
+
+    @abstractmethod
+    def load_data(self, string_data):
+        pass
+
+    @abstractmethod
+    def calculate_dividend(self, valid_lines):
+        pass
+
+    @abstractmethod
+    def is_dividend(self, summary):
+        pass
+
+
+class HDFC(Bank):
+    def sanitise(self, stri):
+        return stri.strip()
+
+    def load_data(self, string_data):
+        res = []
+        for line in string_data:
+            if line.count(",") == 6:
+                dt, summary, rNumber, vdt, debit, credit, closingBalance = line.split(",")
+                if dt is not None and dt.count("/") == 2:
+                    res.append(line)
+        return res
+
+    def calculate_dividend(self, valid_lines):
+        res_dividend = 0
+        res_dataframe = {
+            'Date': [],
+            'Summary': [],
+            'Credit Amount': []
+        }
+        for line in valid_lines:
             dt, summary, rNumber, vdt, debit, credit, closingBalance = line.split(",")
-            if dt is not None and dt.count("/") == 2:
-                res.append(line)
-    return res
+            creditAmount = float(credit) if len(credit) > 0 else 0
+            if creditAmount > 0 and self.is_dividend(summary):
+                res_dividend += creditAmount
+                res_dataframe['Date'].append(dt)
+                res_dataframe['Summary'].append(summary)
+                res_dataframe['Credit Amount'].append(credit)
+        return {"res_dividend": res_dividend, "res_dataframe": res_dataframe}
 
-
-def is_dividend(summary):
-    if summary is None or len(summary) < 3:
+    def is_dividend(self, summary):
+        if summary is None or len(summary) < 3:
+            return False
+        if summary.startswith("NEFT") or summary.startswith("UPI"):
+            return False
+        if "ACH C-" in summary or " DIV " in summary:
+            return True
         return False
-    if summary.startswith("NEFT") or summary.startswith("UPI"):
-        return False
-    if "ACH C-" in summary or " DIV " in summary:
-        return True
-    return False
 
 
-def calculate_dividend(valid_lines):
-    res_dividend = 0
-    res_dataframe = {
-        'Date': [],
-        'Summary': [],
-        'Credit Amount': []
-    }
-    for line in valid_lines:
-        dt, summary, rNumber, vdt, debit, credit, closingBalance = line.split(",")
-        creditAmount = float(credit) if len(credit) > 0 else 0
-        if creditAmount > 0 and is_dividend(summary):
-            res_dividend += creditAmount
-            res_dataframe['Date'].append(dt)
-            res_dataframe['Summary'].append(summary)
-            res_dataframe['Credit Amount'].append(credit)
+class SBI(Bank):
+    def sanitise(self, stri):
+        special_chars = ["$", "#", "@"]
+        special_one = ''
+        to_transfer_index = stri.find("TO TRANSFER")
+        transfer_to_index = stri.find("TRANSFER TO")
+        ignore_index = []
+        if to_transfer_index > -1:
+            for i in range(to_transfer_index + 1, len(stri)):
+                if stri[i] == ",":
+                    ignore_index.append(i)
+                    break
+        if transfer_to_index > -1:
+            for i in range(transfer_to_index + 1, len(stri)):
+                if stri[i] == ",":
+                    ignore_index.append(i)
+                    break
 
-    return {"res_dividend": res_dividend, "res_dataframe": res_dataframe}
+        for sp in special_chars:
+            if sp not in stri:
+                special_one = sp
+                break
+        all_index = [i for i, ltr in enumerate(stri) if ltr == ","]
+        for index in all_index:
+            if index > 40 and index not in ignore_index and index + 1 < len(stri) and stri[index + 1].isdigit() and \
+                    stri[
+                        index - 1].isdigit():
+                stri = stri[: index] + special_one + stri[index + 1:]
+
+        return stri.replace(special_one, "")
+
+    def load_data(self, string_data):
+        res = []
+        for line in string_data:
+            line = self.sanitise(line)
+            if line.count(",") == 7:
+                dt, vDt, summary, ref, debit, credit, balance, nothing = line.split(",")
+                if line.startswith("Txn") == False and (len(debit) > 0 or len(credit) > 0):
+                    res.append(line)
+        return res
+
+    def calculate_dividend(self, valid_lines):
+        res_dividend = 0
+        res_dataframe = {
+            'Date': [],
+            'Summary': [],
+            'Credit Amount': []
+        }
+        for line in valid_lines:
+            dt, vDt, summary, ref, debit, credit, balance, nothing = line.split(",")
+            credit = credit.strip()
+            credit = credit.replace('"', '')
+            credit = credit.replace("'", "")
+            creditAmount = float(credit) if credit is not None and len(credit.strip()) > 0 else 0
+            if creditAmount > 0 and self.is_dividend(summary):
+                res_dividend += creditAmount
+                res_dataframe['Date'].append(dt)
+                res_dataframe['Summary'].append(summary)
+                res_dataframe['Credit Amount'].append(credit)
+        return {"res_dividend": res_dividend, "res_dataframe": res_dataframe}
+
+    def is_dividend(self, summary):
+        return "-ACHCr" in summary
 
 
-def process_csv_file(uploaded_file):
+sbi_processor = SBI()
+hdfc_processor = HDFC()
+
+
+def get_processor(bank):
+    if bank == "HDFC":
+        return hdfc_processor
+    elif bank == "SBI":
+        return sbi_processor
+    else:
+        raise Exception("Invalid Bank Provided")
+
+
+def load_statement(string_data, bank):
+    return get_processor(bank).load_data(string_data)
+
+
+def calculate_dividend(valid_lines, bank):
+    try:
+        return get_processor(bank).calculate_dividend(valid_lines)
+    except:
+        st.session_state["processing_error"] = "Error while calculating dividend. Please try again later"
+        st.session_state["processing_success"] = False
+
+
+def process_csv_file(uploaded_file, bank):
     try:
         stringio = StringIO(uploaded_file.getvalue().decode("utf-8"))
         all = stringio.getvalue().split("\n")
         with st.spinner(text="Ingesting Statement..."):
-            st.session_state["valid_lines"] = load_statement(all)
+            st.session_state["valid_lines"] = load_statement(all, bank)
+            st.session_state['bank'] = bank
             st.session_state["processing_error"] = None
             st.session_state["processing_success"] = True
     except:
         st.session_state["processing_error"] = "Error while processing CSV file. Please make sure you are uploading " \
-                                               "correct CSV file. We currently support only HDFC bank's statements for " \
-                                               "calculating dividend. "
+                                               "correct CSV file. We currently support only HDFC and SBI bank's " \
+                                               "statements for calculating dividend. "
         st.session_state["processing_success"] = False
 
 
 with st.sidebar:
     st.markdown('## Share your Bank Statement')
-    uploaded_file = st.file_uploader("Choose a file")
+    bank = st.selectbox(
+        'Choose your Bank?', ('Select Here', 'HDFC', 'SBI'))
+    st.write("Please choose your bank before uploading the statement")
+    uploaded_file = st.file_uploader("Choose CSV file for bank statement")
     if uploaded_file is not None:
-        process_csv_file(uploaded_file)
-        if st.session_state.get("processing_error") is None:
-            st.write("Statement Successfully Processed")
+        if bank == 'Select Here':
+            st.session_state["processing_error"] = "Bank not selected. Please select bank first and try again."
+            st.session_state["processing_success"] = False
+            uploaded_file = None
+        else:
+            process_csv_file(uploaded_file, bank)
+            if st.session_state.get("processing_error") is None:
+                st.write("Statement Successfully Processed")
+
 
 st.title('Calculate your dividend')
 st.write(
-    "This is a simple utility to calculate the total dividend you received from your stock investments. Just upload your bank statement in CSV format in the left panel. We currently support only HDFC bank's statements.")
+    "This is a simple utility to calculate the total dividend you received from your stock investments. Just upload your bank statement in CSV format in the left panel. We currently support only HDFC and SBI bank's statements.")
 if st.session_state.get("processing_error") is not None:
     st.error(st.session_state.get("processing_error"), icon="🚨")
 if st.session_state.get("processing_success"):
@@ -87,7 +207,7 @@ if st.button('Calculate', key='button2'):
     with st.spinner(text="Calculating"):
         valid_lines = st.session_state.get("valid_lines")
         if valid_lines is not None:
-            result = calculate_dividend(valid_lines)
+            result = calculate_dividend(valid_lines, st.session_state.get("bank"))
             st.write("Your dividend for this financial year is: " + str(result["res_dividend"]) + " INR")
             df = pd.DataFrame(result["res_dataframe"])
             st.table(df)
