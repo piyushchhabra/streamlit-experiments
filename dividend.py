@@ -22,7 +22,7 @@ def load_statement(string_data):
 def is_dividend(summary):
     if summary is None or len(summary) < 3:
         return False
-    if summary.startswith("NEFT") or summary.startswith("NEFT"):
+    if summary.startswith("NEFT") or summary.startswith("UPI"):
         return False
     if "ACH C-" in summary or " DIV " in summary:
         return True
