@@ -181,7 +181,7 @@ with st.sidebar:
     bank = st.selectbox(
         'Choose your Bank?', ('Select Here', 'HDFC', 'SBI'))
     st.write("Please choose your bank before uploading the statement")
-    uploaded_file = st.file_uploader("Choose CSV file for bank statement")
+    uploaded_file = st.file_uploader("Choose CSV file for bank statement", type="csv")
     if uploaded_file is not None:
         if bank == 'Select Here':
             st.session_state["processing_error"] = "Bank not selected. Please select bank first and try again."
