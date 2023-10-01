@@ -29,6 +29,10 @@ class Bank(ABC):
     def is_dividend(self, summary):
         pass
 
+    @abstractmethod
+    def analyse(self, valid_lines, transaction_type, threshold_amount):
+        pass
+
 
 class HDFC(Bank):
     def sanitise(self, stri):
@@ -68,6 +72,24 @@ class HDFC(Bank):
         if "ACH C-" in summary or " DIV " in summary:
             return True
         return False
+
+    def analyse(self, valid_lines, transaction_type, threshold_amount):
+        res_dataframe = {
+            'Date': [],
+            'Summary': [],
+            'Amount': []
+        }
+        for line in valid_lines:
+            dt, summary, rNumber, vdt, debit, credit, closingBalance = line.split(",")
+            creditAmount = float(credit) if len(credit) > 0 else 0
+            debitAmount = float(debit) if len(debit) > 0 else 0
+            targetAmount = debitAmount if (transaction_type == "DEBIT") else creditAmount
+            target = debit if (transaction_type == "DEBIT") else credit
+            if targetAmount > threshold_amount:
+                res_dataframe['Date'].append(dt)
+                res_dataframe['Summary'].append(summary)
+                res_dataframe['Amount'].append(target)
+        return res_dataframe
 
 
 class SBI(Bank):
@@ -134,6 +156,9 @@ class SBI(Bank):
     def is_dividend(self, summary):
         return "-ACHCr" in summary
 
+    def analyse(self, valid_lines, transaction_type, threshold_amount):
+        return None
+
 
 sbi_processor = SBI()
 hdfc_processor = HDFC()
@@ -158,6 +183,15 @@ def calculate_dividend(valid_lines, bank):
     except:
         st.session_state["processing_error"] = "Error while calculating dividend. Please try again later"
         st.session_state["processing_success"] = False
+
+
+def analyse_statement(valid_lines, bank, transaction_type, threshold_amount):
+    try:
+        return get_processor(bank).analyse(valid_lines, transaction_type, threshold_amount)
+    except:
+        st.session_state["processing_error"] = "Error while analysing statement. Please try again later"
+        st.session_state["processing_success"] = False
+
 
 
 def process_csv_file(uploaded_file, bank):
@@ -203,7 +237,7 @@ if st.session_state.get("processing_success"):
         "Statement processed successfully. Please click on calculate to find your dividend for this financial year",
         icon="✅")
 
-if st.button('Calculate', key='button2'):
+if st.button('Calculate Dividend', key='button2'):
     with st.spinner(text="Calculating"):
         valid_lines = st.session_state.get("valid_lines")
         if valid_lines is not None:
@@ -213,3 +247,22 @@ if st.button('Calculate', key='button2'):
             st.table(df)
         else:
             st.write("Please load bank statement first from left panel.")
+
+
+if st.session_state.get("bank") == "HDFC" and st.session_state.get("valid_lines") is not None:
+    with st.spinner(text="Analysing"):
+        valid_lines = st.session_state.get("valid_lines")
+        st.header('Detailed statement analysis', divider='rainbow')
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            transaction_type = st.selectbox(
+                'Transaction type?',
+                ("DEBIT", "CREDIT"))
+
+        with col2:
+            threshold_amount = st.selectbox(
+                'Threshold amount?',
+                (5000, 10000, 25000, 50000, 75000, 100000, 120000, 140000))
+        if st.button("Analyse", type="primary", key="button3"):
+            df2 = pd.DataFrame(analyse_statement(valid_lines, st.session_state.get("bank"), transaction_type, threshold_amount))
+            st.table(df2)
