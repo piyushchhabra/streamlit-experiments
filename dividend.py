@@ -71,6 +71,10 @@ class HDFC(Bank):
             return False
         if "ACH C-" in summary or " DIV " in summary:
             return True
+        for i in range(0, 10):
+            x = " DIV" + str(i)
+            if x in summary:
+                return True
         return False
 
     def analyse(self, valid_lines, transaction_type, threshold_amount):
