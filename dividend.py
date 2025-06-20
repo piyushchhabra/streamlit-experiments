@@ -42,7 +42,7 @@ class HDFC(Bank):
         res = []
         for line in string_data:
             if line.count(",") == 6:
-                dt, summary, rNumber, vdt, debit, credit, closingBalance = line.split(",")
+                dt, summary, vdt, debit, credit, rNumber, closingBalance = line.split(",")
                 if dt is not None and dt.count("/") == 2:
                     res.append(line)
         return res
@@ -55,7 +55,7 @@ class HDFC(Bank):
             'Credit Amount': []
         }
         for line in valid_lines:
-            dt, summary, rNumber, vdt, debit, credit, closingBalance = line.split(",")
+            dt, summary, vdt, debit, credit, rNumber, closingBalance = line.split(",")
             creditAmount = float(credit) if len(credit) > 0 else 0
             if creditAmount > 0 and self.is_dividend(summary):
                 res_dividend += creditAmount
@@ -84,7 +84,7 @@ class HDFC(Bank):
             'Amount': []
         }
         for line in valid_lines:
-            dt, summary, rNumber, vdt, debit, credit, closingBalance = line.split(",")
+            dt, summary, vdt, debit, credit, rNumber, closingBalance = line.split(",")
             creditAmount = float(credit) if len(credit) > 0 else 0
             debitAmount = float(debit) if len(debit) > 0 else 0
             targetAmount = debitAmount if (transaction_type == "DEBIT") else creditAmount
@@ -197,8 +197,7 @@ def analyse_statement(valid_lines, bank, transaction_type, threshold_amount):
         st.session_state["processing_success"] = False
 
 
-
-def process_csv_file(uploaded_file, bank):
+def process_statement_file(uploaded_file, bank):
     try:
         stringio = StringIO(uploaded_file.getvalue().decode("utf-8"))
         all = stringio.getvalue().split("\n")
@@ -208,8 +207,8 @@ def process_csv_file(uploaded_file, bank):
             st.session_state["processing_error"] = None
             st.session_state["processing_success"] = True
     except:
-        st.session_state["processing_error"] = "Error while processing CSV file. Please make sure you are uploading " \
-                                               "correct CSV file. We currently support only HDFC and SBI bank's " \
+        st.session_state["processing_error"] = "Error while processing file. Please make sure you are uploading " \
+                                               "correct csv file. We currently support only HDFC and SBI bank's " \
                                                "statements for calculating dividend. "
         st.session_state["processing_success"] = False
 
@@ -219,14 +218,14 @@ with st.sidebar:
     bank = st.selectbox(
         'Choose your Bank?', ('Select Here', 'HDFC', 'SBI'))
     st.write("Please choose your bank before uploading the statement")
-    uploaded_file = st.file_uploader("Choose CSV file for bank statement", type="csv")
+    uploaded_file = st.file_uploader("Choose file for bank statement", type=["csv", "DELIMITED"])
     if uploaded_file is not None:
         if bank == 'Select Here':
             st.session_state["processing_error"] = "Bank not selected. Please select bank first and try again."
             st.session_state["processing_success"] = False
             uploaded_file = None
         else:
-            process_csv_file(uploaded_file, bank)
+            process_statement_file(uploaded_file, bank)
             if st.session_state.get("processing_error") is None:
                 st.write("Statement Successfully Processed")
 
@@ -266,7 +265,7 @@ if st.session_state.get("bank") == "HDFC" and st.session_state.get("valid_lines"
         with col2:
             threshold_amount = st.selectbox(
                 'Threshold amount?',
-                (5000, 10000, 25000, 50000, 75000, 100000, 120000, 140000))
+                (5000, 10000, 25000, 50000, 75000, 100000, 120000, 150000, 200000, 250000, 300000, 350000, 400000))
         if st.button("Analyse", type="primary", key="button3"):
             df2 = pd.DataFrame(analyse_statement(valid_lines, st.session_state.get("bank"), transaction_type, threshold_amount))
             st.table(df2)
