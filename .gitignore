@@ -2,3 +2,5 @@
 venv
 poc.py
 .DS_Store
+test*.csv
+test*.DELIMITED
