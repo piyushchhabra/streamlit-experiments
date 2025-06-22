@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import pandas as pd
-import plotly.express as px
 
 requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
 
