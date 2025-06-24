@@ -80,6 +80,16 @@ class HDFC(Bank):
         return {"res_dividend": res_dividend, "res_dataframe": res_dataframe}
 
     def is_dividend(self, summary):
+        if summary is None or len(summary) < 3:
+            return False
+        if summary.startswith("NEFT") or summary.startswith("UPI"):
+            return False
+        if "ACH C-" in summary or " DIV " in summary:
+            return True
+        for i in range(0, 10):
+            x = " DIV" + str(i)
+            if x in summary:
+                return True
         return False
 
     def analyse(self, valid_lines, transaction_type, threshold_amount, max_amount, from_date, to_date, contains_text):
