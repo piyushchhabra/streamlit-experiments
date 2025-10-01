@@ -17,7 +17,9 @@ Checkout: https://ask-dividend.streamlit.app/
 ```shell
 git clone https://github.com/piyush-chhabra/streamlit-experiments.git
 cd streamlit-experiments
-pip install -r requirements.txt
+python3 -m venv myenv
+source myenv/bin/activate   
+pip3 install -r requirements.txt
 ```
 3. Run the app
 ```shell

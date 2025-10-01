@@ -109,17 +109,28 @@ if 'raw_data' in st.session_state:
             with col2:
                 st.subheader(f"Total Credit: :green[₹ {format_inr(credit_total)}]")
 
+            # Display total reward points
+            if 'totalRewards' in selected_statement_data and selected_statement_data['totalRewards'] is not None:
+                st.header("Reward Points", divider="rainbow")
+                st.subheader(f"Total Reward Points Earned: :blue[{selected_statement_data['totalRewards']}]")
+
             st.header("Spending by Keyword", divider="rainbow")
             
             keywords = ['zomato', 'swiggy', 'zepto', 'blinkit','amazon', 'myntra']
             summary_data = []
 
-            debit_df = filtered_df[filtered_df['transactionType'] == 'DEBIT'].copy()
+            # Include both DEBIT and CREDIT transactions for keyword analysis
+            # DEBIT transactions are positive amounts, CREDIT transactions (refunds) are negative amounts
+            keyword_df = filtered_df.copy()
+            keyword_df['amount'] = keyword_df.apply(
+                lambda row: row['amount'] if row['transactionType'] == 'DEBIT' else -row['amount'], 
+                axis=1
+            )
 
             for keyword in keywords:
-                mask = debit_df['description'].str.contains(keyword, case=False, na=False)
-                total = debit_df[mask]['amount'].sum()
-                if total > 0:
+                mask = keyword_df['description'].str.contains(keyword, case=False, na=False)
+                total = keyword_df[mask]['amount'].sum()
+                if total != 0:  # Changed from > 0 to != 0 to include refunds
                     summary_data.append({'Keyword': keyword.capitalize(), 'Total Spent': total})
             
             if summary_data:
