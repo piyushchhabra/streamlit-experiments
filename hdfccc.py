@@ -41,7 +41,7 @@ if fetch_button:
     else:
         with st.spinner("Fetching transactions..."):
             try:
-                api_url = "https://themindmap.azurewebsites.net/api/hdfc/transactions"
+                api_url = "https://rosymindmap.azurewebsites.net/api/hdfc/transactions"
                 payload = {
                     "userEmail": email,
                     "secret": secret
